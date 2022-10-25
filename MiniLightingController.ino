@@ -28,9 +28,13 @@ enum STATE : uint8_t
 	STATE_ON
 };
 STATE PWMState = STATE_OFF;
-uint8_t PWMLevel = 0;	// Должно быть 2 бита, но почему-то работает так...
-volatile bool ForseEnable = false;
+int16_t PWMLevel = 0;
+volatile bool ForceEnable = false;
 uint8_t CountReadingsDistance = 0;
+
+
+inline uint16_t GetDistance();
+inline void OnSwitchChange();
 
 
 void setup()
@@ -51,10 +55,10 @@ void setup()
 
 void loop()
 {
-	uint16_t distance = (ForseEnable == false) ? GetDistance() : DISTANCE_ACTUATION_MIN;
+	uint16_t distance = (ForceEnable == false) ? GetDistance() : DISTANCE_ACTUATION_MIN;
 	
 	// Т.к. при принудительном включении задержки, создаваемой функцией GetDistance() нету, то моментально яркость возрастает до 255.
-	if(ForseEnable == true)
+	if(ForceEnable == true)
 	{
 		delay(TIMEOUT_TIME / 1000);
 	}
@@ -122,10 +126,15 @@ void loop()
 			
 			break;
 		}
+		default:
+		{
+			break;
+		}
 	}
 	
-	analogWrite(PIN_LOAD, PWMLevel);
-	//analogWrite(PIN_LOAD, pow(255, PWMLevel / 255));	// Да, но почему-то жрёт аж 2Кб памяти, которых нету....
+	uint8_t crt_val = ((uint32_t)PWMLevel * PWMLevel * PWMLevel + 130305) >> 16;
+	crt_val = (crt_val == 1) ? 0 : crt_val;
+	analogWrite(PIN_LOAD, crt_val);
 	
 	return;
 }
@@ -138,21 +147,21 @@ inline uint16_t GetDistance()
 	digitalWrite(PIN_TRIG, LOW);
 	
 #ifdef TIME_ALIGNMENT
-	uint16_t p = pulseIn(PIN_ECHO, HIGH, TIMEOUT_TIME);
+	uint16_t p = pulseIn(PIN_ECHO, HIGH, (TIMEOUT_TIME / 16));
 	if(p > 0)
 	{
 		delay((TIMEOUT_TIME - p) / 1000);
 	}
 	return p / 58;
 #else
-	return pulseIn(PIN_ECHO, HIGH, TIMEOUT_TIME) / 58;
+	return pulseIn(PIN_ECHO, HIGH, (TIMEOUT_TIME / 16)) / 58;
 #endif
 }
 
 // Прерывание изменение состояния выключателя.
 inline void OnSwitchChange()
 {
-	ForseEnable = (digitalRead(PIN_SW) == HIGH) ? false : true;
+	ForceEnable = (digitalRead(PIN_SW) == HIGH) ? false : true;
 	
 	return;
 }
